@@ -15,6 +15,134 @@ from src.formato import fmt_num, fmt_pct, formatar_tabela
 st.set_page_config(page_title="Liberados x Montados", layout="wide")
 
 # =============================================================================
+# TEMA (fundo futurista) — planeta estilizado com destaque na Amazônia,
+# gradientes azuis, partículas discretas. Baseado numa técnica testada:
+# em vez de forçar um "cartão branco" por cima do conteúdo (que não pega em
+# todas as versões do Streamlit), deixamos o conteúdo transparente e forçamos
+# a cor do TEXTO pra clara de forma ampla — mais confiável entre versões.
+# =============================================================================
+CSS_TEMA = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif !important;
+  color: #E7F3EC !important;
+}
+
+/* fundo: gradiente azul-marinho profundo */
+.stApp {
+  background: linear-gradient(150deg, #030712 0%, #071a34 45%, #0a2a52 100%) !important;
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+/* partículas discretas (pontinhos) */
+.bg-stars {
+  position: fixed; inset: 0;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.4px),
+    radial-gradient(rgba(150,200,255,0.35) 1px, transparent 1.4px);
+  background-size: 160px 160px, 95px 95px;
+  background-position: 0 0, 50px 70px;
+  opacity: 0.35;
+  z-index: -5;
+  pointer-events: none;
+}
+
+/* planeta estilizado, canto superior direito */
+.bg-earth {
+  position: fixed;
+  top: -8vw; right: -10vw;
+  width: min(30vw, 420px); height: min(30vw, 420px);
+  z-index: -4;
+  pointer-events: none;
+}
+.bg-earth-atmo {
+  position: absolute; inset: -6%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, rgba(96,165,250,0.35), transparent 62%);
+  filter: blur(18px);
+}
+.bg-earth-globe {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 26%, rgba(191,219,254,0.5) 0%, transparent 12%),
+    radial-gradient(circle at 34% 30%, #1d4ed8 0%, #1e3a8a 42%, #0b1533 78%, #050a17 100%);
+  box-shadow: inset -50px -40px 90px rgba(0,0,0,0.6), 0 0 70px 14px rgba(59,130,246,0.20);
+}
+.bg-earth-continent {
+  position: absolute; width: 46%; height: 58%; left: 27%; top: 18%;
+  background: radial-gradient(ellipse 60% 70% at 45% 30%, rgba(34,197,94,0.55) 0%, rgba(21,128,61,0.42) 45%, transparent 72%);
+  border-radius: 46% 54% 50% 50% / 55% 50% 55% 45%;
+  filter: blur(1.5px);
+  transform: rotate(-8deg);
+}
+.bg-earth-amazon-glow {
+  position: absolute; width: 26%; height: 20%; left: 38%; top: 34%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74,222,128,0.85) 0%, rgba(34,197,94,0.35) 45%, transparent 75%);
+  filter: blur(4px);
+  mix-blend-mode: screen;
+  animation: bgAmazonPulse 4.5s ease-in-out infinite;
+}
+@keyframes bgAmazonPulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.95; transform: scale(1.12); }
+}
+.bg-earth-terminator {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 72% 68%, transparent 30%, rgba(2,6,18,0.75) 68%);
+}
+
+/* véu leve pra manter contraste do conteúdo por cima do fundo */
+.bg-scrim {
+  position: fixed; inset: 0;
+  background: linear-gradient(180deg, rgba(3,7,18,0.35) 0%, rgba(3,7,18,0.15) 30%, rgba(3,7,18,0.25) 100%);
+  z-index: -3;
+  pointer-events: none;
+}
+
+/* inputs, selects e áreas de upload: fundo escuro translúcido pra combinar com o tema */
+[data-testid="stTextInput"] input,
+[data-testid="stFileUploaderDropzone"],
+[data-baseweb="select"] > div,
+textarea {
+  background-color: rgba(255,255,255,0.06) !important;
+  border-color: rgba(255,255,255,0.18) !important;
+  color: #E7F3EC !important;
+}
+[data-testid="stFileUploaderDropzone"] * { color: #E7F3EC !important; }
+
+/* botões: acento verde, combinando com o restante do app */
+.stButton > button {
+  background: linear-gradient(135deg, #1c7a45, #2f9e5c) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #08213f 0%, #0a2a52 100%) !important;
+}
+</style>
+
+<div class="bg-stars"></div>
+<div class="bg-earth">
+  <div class="bg-earth-atmo"></div>
+  <div class="bg-earth-globe">
+    <div class="bg-earth-continent"></div>
+    <div class="bg-earth-amazon-glow"></div>
+    <div class="bg-earth-terminator"></div>
+  </div>
+</div>
+<div class="bg-scrim"></div>
+"""
+
+st.markdown(CSS_TEMA, unsafe_allow_html=True)
+
+# =============================================================================
 # DATAGRID (tabela estilo profissional) — antes em src/datagrid.py, agora
 # direto aqui pelo mesmo motivo.
 # =============================================================================
