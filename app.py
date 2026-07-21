@@ -1,6 +1,7 @@
 import html as _html
 import json
 import re
+import random as _bgrandom
 
 import streamlit as st
 import pandas as pd
@@ -16,126 +17,208 @@ st.set_page_config(page_title="Liberados x Montados", layout="wide")
 
 # =============================================================================
 # TEMA (fundo futurista) — planeta estilizado com destaque na Amazônia,
-# gradientes azuis, partículas discretas. Baseado numa técnica testada:
-# em vez de forçar um "cartão branco" por cima do conteúdo (que não pega em
-# todas as versões do Streamlit), deixamos o conteúdo transparente e forçamos
-# a cor do TEXTO pra clara de forma ampla — mais confiável entre versões.
+# gradientes azuis, iluminação sutil, partículas discretas, atmosfera, nuvens
+# e anel orbital. Mesma estrutura do exemplo de referência (Delly's),
+# adaptada pra esse app.
+#
+# Técnica: conteúdo transparente + cor de texto forçada pra clara de forma
+# ampla (mais confiável entre versões do Streamlit do que tentar sobrepor
+# um "cartão branco" no .block-container).
 # =============================================================================
-CSS_TEMA = """
+_bgrandom.seed(42)
+
+
+def _gen_star_shadows(n, min_op, max_op):
+    """Gera posições fixas (x,y em vw/vh) de partículas/estrelas para um
+    campo discreto via CSS puro (box-shadow), sem precisar de imagem."""
+    parts = []
+    for _ in range(n):
+        x = round(_bgrandom.uniform(0, 100), 2)
+        y = round(_bgrandom.uniform(0, 100), 2)
+        op = round(_bgrandom.uniform(min_op, max_op), 2)
+        parts.append(f"{x}vw {y}vh 0 rgba(148,197,255,{op})")
+    return ",\n    ".join(parts)
+
+
+_STARS_FAR = _gen_star_shadows(70, 0.10, 0.28)
+_STARS_NEAR = _gen_star_shadows(30, 0.20, 0.42)
+
+CSS_TEMA = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-html, body, [class*="css"] {
+html, body, [class*="css"] {{
   font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif !important;
   color: #E7F3EC !important;
-}
+}}
 
-/* fundo: gradiente azul-marinho profundo */
-.stApp {
+.stApp {{
   background: linear-gradient(150deg, #030712 0%, #071a34 45%, #0a2a52 100%) !important;
   background-attachment: fixed;
   background-size: cover;
-}
+}}
 
-/* partículas discretas (pontinhos) */
-.bg-stars {
+/* Campo de partículas — estrelas distantes (estáticas, bem discretas) */
+.bg-stars-far {{
   position: fixed; inset: 0;
-  background-image:
-    radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.4px),
-    radial-gradient(rgba(150,200,255,0.35) 1px, transparent 1.4px);
-  background-size: 160px 160px, 95px 95px;
-  background-position: 0 0, 50px 70px;
-  opacity: 0.35;
+  width: 1px; height: 1px;
+  background: transparent;
+  box-shadow: {_STARS_FAR};
+  z-index: -6;
+  pointer-events: none;
+  animation: bgTwinkleFar 9s ease-in-out infinite alternate;
+}}
+/* Campo de partículas — mais próximas, leve brilho e cintilação */
+.bg-stars-near {{
+  position: fixed; inset: 0;
+  width: 2px; height: 2px;
+  background: transparent;
+  box-shadow: {_STARS_NEAR};
+  border-radius: 50%;
+  z-index: -6;
+  pointer-events: none;
+  animation: bgTwinkleNear 6s ease-in-out infinite alternate;
+}}
+@keyframes bgTwinkleFar {{
+  0%   {{ opacity: 0.5; }}
+  100% {{ opacity: 1; }}
+}}
+@keyframes bgTwinkleNear {{
+  0%   {{ opacity: 0.6; transform: translateY(0); }}
+  100% {{ opacity: 1; transform: translateY(-3px); }}
+}}
+
+/* Planeta Terra — esfera 100% CSS, com oceano azul, continente
+   (América do Sul) e um brilho verde-esmeralda sutil sobre a região
+   Amazônica, além de nuvens, terminador e anel tecnológico orbital. */
+.bg-earth-wrap {{
+  position: fixed;
+  right: -14vw; bottom: -20vw;
+  width: min(52vw, 720px); height: min(52vw, 720px);
   z-index: -5;
   pointer-events: none;
-}
-
-/* planeta estilizado, canto superior direito */
-.bg-earth {
-  position: fixed;
-  top: -8vw; right: -10vw;
-  width: min(30vw, 420px); height: min(30vw, 420px);
-  z-index: -4;
-  pointer-events: none;
-}
-.bg-earth-atmo {
+  animation: bgEarthFloat 14s ease-in-out infinite;
+}}
+@keyframes bgEarthFloat {{
+  0%, 100% {{ transform: translateY(0); }}
+  50%      {{ transform: translateY(-14px); }}
+}}
+.bg-earth-atmo {{
   position: absolute; inset: -6%;
   border-radius: 50%;
   background: radial-gradient(circle at 38% 32%, rgba(96,165,250,0.35), transparent 62%);
   filter: blur(18px);
-}
-.bg-earth-globe {
+  opacity: 0.8;
+}}
+.bg-earth-globe {{
   position: absolute; inset: 0;
   border-radius: 50%;
   overflow: hidden;
   background:
-    radial-gradient(circle at 30% 26%, rgba(191,219,254,0.5) 0%, transparent 12%),
+    radial-gradient(circle at 30% 26%, rgba(191,219,254,0.55) 0%, transparent 12%),
     radial-gradient(circle at 34% 30%, #1d4ed8 0%, #1e3a8a 42%, #0b1533 78%, #050a17 100%);
-  box-shadow: inset -50px -40px 90px rgba(0,0,0,0.6), 0 0 70px 14px rgba(59,130,246,0.20);
-}
-.bg-earth-continent {
+  box-shadow:
+    inset -60px -50px 110px rgba(0,0,0,0.65),
+    inset 22px 18px 60px rgba(147,197,253,0.18),
+    0 0 90px 20px rgba(59,130,246,0.20);
+}}
+.bg-earth-continent {{
   position: absolute; width: 46%; height: 58%; left: 27%; top: 18%;
-  background: radial-gradient(ellipse 60% 70% at 45% 30%, rgba(34,197,94,0.55) 0%, rgba(21,128,61,0.42) 45%, transparent 72%);
+  background:
+    radial-gradient(ellipse 60% 70% at 45% 30%, rgba(34,197,94,0.55) 0%, rgba(21,128,61,0.42) 45%, transparent 72%),
+    radial-gradient(ellipse 50% 40% at 55% 62%, rgba(101,163,13,0.35) 0%, transparent 70%);
   border-radius: 46% 54% 50% 50% / 55% 50% 55% 45%;
   filter: blur(1.5px);
+  opacity: 0.92;
   transform: rotate(-8deg);
-}
-.bg-earth-amazon-glow {
+}}
+.bg-earth-amazon-glow {{
   position: absolute; width: 26%; height: 20%; left: 38%; top: 34%;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(74,222,128,0.85) 0%, rgba(34,197,94,0.35) 45%, transparent 75%);
   filter: blur(4px);
   mix-blend-mode: screen;
   animation: bgAmazonPulse 4.5s ease-in-out infinite;
-}
-@keyframes bgAmazonPulse {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50%      { opacity: 0.95; transform: scale(1.12); }
-}
-.bg-earth-terminator {
+}}
+@keyframes bgAmazonPulse {{
+  0%, 100% {{ opacity: 0.55; transform: scale(1); }}
+  50%      {{ opacity: 0.95; transform: scale(1.12); }}
+}}
+.bg-earth-clouds {{
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 70% 30% at 60% 15%, rgba(248,250,252,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 20% at 30% 70%, rgba(248,250,252,0.06) 0%, transparent 65%);
+  mix-blend-mode: screen;
+}}
+.bg-earth-terminator {{
   position: absolute; inset: 0; border-radius: 50%;
-  background: radial-gradient(circle at 72% 68%, transparent 30%, rgba(2,6,18,0.75) 68%);
-}
+  background: radial-gradient(circle at 72% 68%, transparent 30%, rgba(2,6,18,0.82) 68%);
+}}
+.bg-earth-ring {{
+  position: absolute; inset: -9%;
+  border-radius: 50%;
+  border: 1px dashed rgba(96,165,250,0.28);
+  animation: bgRingSpin 60s linear infinite;
+}}
+.bg-earth-ring::before {{
+  content: '';
+  position: absolute; top: -4px; left: 50%;
+  width: 8px; height: 8px; margin-left: -4px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 10px 3px rgba(96,165,250,0.8);
+}}
+@keyframes bgRingSpin {{
+  from {{ transform: rotate(0deg); }}
+  to   {{ transform: rotate(360deg); }}
+}}
 
 /* véu leve pra manter contraste do conteúdo por cima do fundo */
-.bg-scrim {
+.bg-scrim {{
   position: fixed; inset: 0;
-  background: linear-gradient(180deg, rgba(3,7,18,0.35) 0%, rgba(3,7,18,0.15) 30%, rgba(3,7,18,0.25) 100%);
-  z-index: -3;
+  background:
+    linear-gradient(180deg, rgba(6,11,22,0.55) 0%, rgba(6,11,22,0.25) 22%, rgba(6,11,22,0.38) 100%),
+    radial-gradient(ellipse 65% 45% at 50% 0%, rgba(6,11,22,0.30) 0%, transparent 60%);
+  z-index: -4;
   pointer-events: none;
-}
+}}
 
 /* inputs, selects e áreas de upload: fundo escuro translúcido pra combinar com o tema */
 [data-testid="stTextInput"] input,
 [data-testid="stFileUploaderDropzone"],
 [data-baseweb="select"] > div,
-textarea {
+textarea {{
   background-color: rgba(255,255,255,0.06) !important;
   border-color: rgba(255,255,255,0.18) !important;
   color: #E7F3EC !important;
-}
-[data-testid="stFileUploaderDropzone"] * { color: #E7F3EC !important; }
+}}
+[data-testid="stFileUploaderDropzone"] * {{ color: #E7F3EC !important; }}
 
 /* botões: acento verde, combinando com o restante do app */
-.stButton > button {
+.stButton > button {{
   background: linear-gradient(135deg, #1c7a45, #2f9e5c) !important;
   color: #ffffff !important;
   border: none !important;
-}
+}}
 
-section[data-testid="stSidebar"] {
+section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #08213f 0%, #0a2a52 100%) !important;
-}
+}}
 </style>
 
-<div class="bg-stars"></div>
-<div class="bg-earth">
+<div class="bg-stars-far"></div>
+<div class="bg-stars-near"></div>
+<div class="bg-earth-wrap">
   <div class="bg-earth-atmo"></div>
   <div class="bg-earth-globe">
     <div class="bg-earth-continent"></div>
     <div class="bg-earth-amazon-glow"></div>
+    <div class="bg-earth-clouds"></div>
     <div class="bg-earth-terminator"></div>
   </div>
+  <div class="bg-earth-ring"></div>
 </div>
 <div class="bg-scrim"></div>
 """
