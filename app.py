@@ -1,3 +1,7 @@
+import html as _html
+import json
+import re
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,16 +11,250 @@ from config.estados import ESTADOS, CORTE_PADRAO, detectar_estado, detectar_tipo
 from src.etl import ler_excel, montar_snapshot
 from src import metricas
 from src.formato import fmt_num, fmt_pct, formatar_tabela
-from src.datagrid import render_datagrid
-from src.tema import CSS_FUNDO_FUTURISTA
 
 st.set_page_config(page_title="Liberados x Montados", layout="wide")
+
+# =============================================================================
+# TEMA (fundo futurista) — antes em src/tema.py, agora direto aqui pra evitar
+# problemas de arquivo/import no deploy.
+# =============================================================================
+CSS_FUNDO_FUTURISTA = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+}
+
+.stApp {
+  background:
+    radial-gradient(circle at 86% 18%, rgba(120, 210, 255, 0.28) 0%, rgba(120, 210, 255, 0) 30%),
+    radial-gradient(ellipse 220px 170px at 82% 21%, #35b46a 0%, #1f7a45 45%, rgba(31,122,69,0) 70%),
+    radial-gradient(circle at 84% 20%, #2d6fb0 0%, #14335f 42%, rgba(10,20,40,0) 46%),
+    radial-gradient(circle at 10% 90%, rgba(60, 140, 255, 0.10) 0%, rgba(10,20,40,0) 55%),
+    linear-gradient(150deg, #030712 0%, #071a34 45%, #0a2a52 100%);
+  background-attachment: fixed;
+  background-size: cover;
+  position: relative;
+}
+
+.stApp::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.55) 1px, transparent 1.4px),
+    radial-gradient(rgba(150,200,255,0.4) 1px, transparent 1.4px);
+  background-size: 160px 160px, 95px 95px;
+  background-position: 0 0, 50px 70px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.stApp::after {
+  content: "";
+  position: fixed;
+  top: 17%;
+  right: 15%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #baffd8;
+  box-shadow: 0 0 0 0 rgba(186, 255, 216, 0.6);
+  animation: dg-pulse 2.4s ease-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes dg-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(186, 255, 216, 0.55); }
+  70%  { box-shadow: 0 0 0 18px rgba(186, 255, 216, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(186, 255, 216, 0); }
+}
+
+.block-container {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  padding: 2.2rem 2.4rem 2.6rem 2.4rem;
+  margin-top: 1.2rem;
+  box-shadow: 0 12px 45px rgba(2, 10, 25, 0.45);
+}
+
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #08213f 0%, #0a2a52 100%);
+}
+section[data-testid="stSidebar"] * {
+  color: #eaf6f0 !important;
+}
+</style>
+"""
+
 st.markdown(CSS_FUNDO_FUTURISTA, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Google Sheets é opcional: se não estiver configurado em st.secrets, o app
-# ainda funciona (só não guarda histórico entre sessões).
-# ---------------------------------------------------------------------------
+# =============================================================================
+# DATAGRID (tabela estilo profissional) — antes em src/datagrid.py, agora
+# direto aqui pelo mesmo motivo.
+# =============================================================================
+_ROTULOS_GRID = {
+    "categoria": "Categoria", "pedidos": "Pedidos", "peso": "Peso", "valor": "Valor",
+    "estado": "Estado", "numero_pedido": "Nº Pedido", "cliente": "Cliente", "cidade": "Cidade",
+    "data_hora_liberacao": "Liberado em", "idade_horas": "Idade (h)", "faixa_aging": "Faixa",
+    "status_corte": "Status", "timestamp": "Data / Hora", "pedidos_pendentes": "Pedidos pendentes",
+    "peso_pendente": "Peso pendente", "valor_pendente": "Valor pendente",
+    "pedidos_montados": "Pedidos montados", "peso_montado": "Peso montado",
+    "valor_montado": "Valor montado", "pct_montado": "% Montado",
+}
+
+_CSS_GRID = """
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+#{uid} {{ font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif; }}
+#{uid} .dg-title {{ font-weight: 700; font-size: 15px; color: #0b3d24; padding: 2px 2px 8px 2px; letter-spacing: .01em; }}
+#{uid} .dg-shell {{ border-radius: 12px; overflow: hidden; border: 1px solid #d7ede1; box-shadow: 0 4px 18px rgba(15, 81, 50, 0.08); background: #ffffff; }}
+#{uid} .dg-scroll {{ max-height: {altura}px; overflow: auto; }}
+#{uid} table {{ width: 100%; border-collapse: separate; border-spacing: 0; }}
+#{uid} thead th {{
+  position: sticky; top: 0; z-index: 3;
+  background: linear-gradient(135deg, #1c7a45, #2f9e5c 55%, #3cb873);
+  color: #ffffff; padding: 13px 16px; font-size: 12.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; text-align: center;
+  white-space: nowrap; border-bottom: 2px solid #17693b;
+}}
+#{uid} tbody td {{ padding: 11px 16px; font-size: 13.5px; color: #16382a; text-align: center; white-space: nowrap; border-bottom: 1px solid #eef6f1; }}
+#{uid} tbody tr {{ transition: background-color .12s ease-in-out; }}
+#{uid} tbody tr:nth-child(even) {{ background-color: #f5fbf8; }}
+#{uid} tbody tr:hover td {{ background-color: #dcf3e6 !important; }}
+#{uid} tbody tr.dg-total td {{ background-color: #bfead0 !important; color: #0b3d24; font-weight: 800; }}
+#{uid} tbody tr.dg-montados td {{ background-color: #e4f8ec; }}
+#{uid} tbody tr.dg-liberados td {{ background-color: #f4fcf7; }}
+#{uid} .dg-pager {{ display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 12px; background: #f8fdfa; border-top: 1px solid #e4f2ea; font-size: 12.5px; color: #2f6b46; }}
+#{uid} .dg-pager button {{ border: none; background: #2f9e5c; color: white; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 12.5px; font-family: inherit; transition: transform .1s ease, background .15s ease; }}
+#{uid} .dg-pager button:hover:not(:disabled) {{ background: #237a48; transform: translateY(-1px); }}
+#{uid} .dg-pager button:disabled {{ opacity: .35; cursor: default; }}
+#{uid} .dg-empty {{ padding: 22px; text-align: center; color: #6b8f7c; font-size: 13px; }}
+"""
+
+_JS_GRID = """
+(function() {{
+  const rowsPerPage = {linhas_por_pagina};
+  const dados = {dados_json};
+  const classes = {classes_json};
+  const tbody = document.getElementById('{uid}_body');
+  const info = document.getElementById('{uid}_info');
+  const prevBtn = document.getElementById('{uid}_prev');
+  const nextBtn = document.getElementById('{uid}_next');
+  let page = 0;
+  const totalPages = Math.max(1, Math.ceil(dados.length / rowsPerPage));
+
+  function render() {{
+    tbody.innerHTML = '';
+    const inicio = page * rowsPerPage;
+    const fim = Math.min(inicio + rowsPerPage, dados.length);
+    if (dados.length === 0) {{
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.className = 'dg-empty'; td.colSpan = 99; td.textContent = 'Sem dados neste snapshot.';
+      tr.appendChild(td); tbody.appendChild(tr);
+    }}
+    for (let i = inicio; i < fim; i++) {{
+      const tr = document.createElement('tr');
+      if (classes[i]) tr.className = classes[i];
+      dados[i].forEach(valor => {{
+        const td = document.createElement('td');
+        td.textContent = valor;
+        tr.appendChild(td);
+      }});
+      tbody.appendChild(tr);
+    }}
+    info.textContent = 'Página ' + (page + 1) + ' de ' + totalPages + ' · ' + dados.length + ' registros';
+    prevBtn.disabled = page === 0;
+    nextBtn.disabled = page >= totalPages - 1;
+  }}
+  prevBtn.onclick = () => {{ if (page > 0) {{ page--; render(); }} }};
+  nextBtn.onclick = () => {{ if (page < totalPages - 1) {{ page++; render(); }} }};
+  render();
+}})();
+"""
+
+
+def _rotulo_grid(col):
+    return _ROTULOS_GRID.get(col, col.replace("_", " ").title())
+
+
+def _slug_grid(texto):
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", str(texto)).strip("_").lower()
+    return s or "grid"
+
+
+def _val_grid(v):
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    return str(v)
+
+
+def _classe_categoria_grid(cat):
+    if cat == "TOTAL":
+        return "dg-total"
+    if cat == "Montados":
+        return "dg-montados"
+    if cat.startswith("Liberados"):
+        return "dg-liberados"
+    return ""
+
+
+def render_datagrid(df, key, titulo=None, altura_max=360, linhas_por_pagina=8, colorir_categoria=False):
+    """DataGrid HTML/CSS/JS: cabeçalho fixo, hover, zebra, paginação real (só a página atual entra no DOM)."""
+    uid = f"dg_{_slug_grid(key)}"
+    n_linhas = 0 if df.empty else len(df)
+
+    dados, classes = [], []
+    if not df.empty:
+        for _, row in df.iterrows():
+            dados.append([_val_grid(v) for v in row])
+            classes.append(
+                _classe_categoria_grid(str(row["categoria"]))
+                if colorir_categoria and "categoria" in df.columns else ""
+            )
+
+    headers = "".join(f"<th>{_html.escape(_rotulo_grid(c))}</th>" for c in df.columns)
+    titulo_html = f"<div class='dg-title'>{_html.escape(titulo)}</div>" if titulo else ""
+    css = _CSS_GRID.format(uid=uid, altura=altura_max)
+    js = _JS_GRID.format(
+        uid=uid, linhas_por_pagina=linhas_por_pagina,
+        dados_json=json.dumps(dados, ensure_ascii=False),
+        classes_json=json.dumps(classes, ensure_ascii=False),
+    )
+
+    grid_html = f"""
+    <div id="{uid}">
+      <style>{css}</style>
+      {titulo_html}
+      <div class="dg-shell">
+        <div class="dg-scroll">
+          <table>
+            <thead><tr>{headers}</tr></thead>
+            <tbody id="{uid}_body"></tbody>
+          </table>
+        </div>
+        <div class="dg-pager">
+          <button id="{uid}_prev">‹ Anterior</button>
+          <span id="{uid}_info"></span>
+          <button id="{uid}_next">Próxima ›</button>
+        </div>
+      </div>
+      <script>{js}</script>
+    </div>
+    """
+    linhas_visiveis = min(n_linhas, linhas_por_pagina) if n_linhas else 1
+    altura_estimada = min(altura_max, 46 + 40 * linhas_visiveis) + (34 if titulo else 0) + 56
+    return grid_html, altura_estimada
+
+
+# =============================================================================
+# App
+# =============================================================================
 GSHEETS_OK = "gcp_service_account" in st.secrets and "gsheets" in st.secrets
 if GSHEETS_OK:
     from src import gsheets
