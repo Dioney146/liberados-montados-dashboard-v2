@@ -242,8 +242,19 @@ _ROTULOS_GRID = {
 _CSS_GRID = """
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 #{uid} {{ font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif; }}
-#{uid} .dg-title {{ font-weight: 700; font-size: 15px; color: #0b3d24; padding: 2px 2px 8px 2px; letter-spacing: .01em; }}
-#{uid} .dg-shell {{ border-radius: 12px; overflow: hidden; border: 1px solid #d7ede1; box-shadow: 0 4px 18px rgba(15, 81, 50, 0.08); background: #ffffff; }}
+#{uid} .dg-title {{
+  font-weight: 700;
+  font-size: 15px;
+  color: #eaf3ff;
+  letter-spacing: .01em;
+  background: linear-gradient(135deg, #123a5e, #0a2540);
+  padding: 10px 16px;
+  border-radius: 12px 12px 0 0;
+  border: 1px solid #1c4d78;
+  border-bottom: none;
+}}
+#{uid} .dg-shell {{ border-radius: 0 0 12px 12px; overflow: hidden; border: 1px solid #d7ede1; box-shadow: 0 4px 18px rgba(15, 81, 50, 0.08); background: #ffffff; }}
+#{uid}:not(:has(.dg-title)) .dg-shell {{ border-radius: 12px; }}
 #{uid} .dg-scroll {{ max-height: {altura}px; overflow: auto; }}
 #{uid} table {{ width: 100%; border-collapse: separate; border-spacing: 0; }}
 #{uid} thead th {{
