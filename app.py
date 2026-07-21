@@ -74,23 +74,23 @@ html, body, [class*="css"] {
 }
 
 [data-testid="stAppViewContainer"] > .main .block-container,
-.block-container {
-  position: relative;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 20px;
-  padding: 2.2rem 2.4rem 2.6rem 2.4rem;
-  margin-top: 1.2rem;
-  box-shadow: 0 12px 45px rgba(2, 10, 25, 0.45);
+div.block-container {
+  position: relative !important;
+  z-index: 10 !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  padding: 2.2rem 2.4rem 2.6rem 2.4rem !important;
+  margin-top: 1.2rem !important;
+  box-shadow: 0 12px 45px rgba(2, 10, 25, 0.45) !important;
 }
 
 /* garante que o texto do conteúdo principal fique escuro e legível
    independentemente do tema, já que o fundo do app agora é escuro */
-.block-container, .block-container p, .block-container span,
-.block-container label, .block-container li,
-.block-container h1, .block-container h2, .block-container h3,
-.block-container h4, .block-container h5, .block-container h6 {
-  color: #111827;
+div.block-container, div.block-container p, div.block-container span,
+div.block-container label, div.block-container li, div.block-container div,
+div.block-container h1, div.block-container h2, div.block-container h3,
+div.block-container h4, div.block-container h5, div.block-container h6 {
+  color: #111827 !important;
 }
 
 section[data-testid="stSidebar"] {
